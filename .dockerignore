@@ -1,0 +1,9 @@
+.dockerignore
+.env
+.env.example
+.gitignore
+docker-compose.yaml
+dockerfile.dev
+dockerfile.prod
+makefile
+README.md

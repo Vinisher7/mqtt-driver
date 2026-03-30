@@ -3,49 +3,71 @@ package mqtt
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"mqtt-driver/internal/config/logger"
+	"mqtt-driver/internal/models"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
-	"mqtt-driver/internal/config"
-	"mqtt-driver/internal/models"
-
 	paho "github.com/eclipse/paho.mqtt.golang"
+	"go.uber.org/zap"
 )
 
-// brazilLocation é UTC-3 fixo (sem DST — horário de Brasília padrão)
-var brazilLocation = time.FixedZone("UTC-3", -3*60*60)
+var (
+	// MQTT_BROKER    = "MQTT_BROKER"
+	// MQTT_CLIENT_ID = "MQTT_CLIENT_ID"
+	// MQTT_USERNAME  = "MQTT_USERNAME"	
+	// MQTTPassword   = "MQTTPassword"
+	// TAG_GROUP_SIZE = "TAG_GROUP_SIZE"
+
+	BRAZIL_LOCATION = time.FixedZone("UTC-3", -3*60*60)
+)
 
 type Subscriber struct {
 	client    paho.Client
 	publisher *Publisher
-	cfg       *config.Config
 }
 
-func NewSubscriber(cfg *config.Config, pub *Publisher) (*Subscriber, error) {
+func NewSubscriber(pub *Publisher) (sub *Subscriber, err error) {
+	logger.Info("Init NewSubscriber", zap.String("journey", "subscriber"))
+
 	opts := paho.NewClientOptions().
-		AddBroker(cfg.MQTTBroker).
-		SetClientID(cfg.MQTTClientID + "-sub").
+		AddBroker(os.Getenv(MQTT_BROKER)).
+		SetClientID(os.Getenv(MQTT_CLIENT_ID) + "-sub").
 		SetCleanSession(true).
 		SetAutoReconnect(true).
 		SetConnectTimeout(10 * time.Second)
 
-	if cfg.MQTTUsername != "" {
-		opts.SetUsername(cfg.MQTTUsername).SetPassword(cfg.MQTTPassword)
+	if os.Getenv(MQTT_USERNAME) == "" {
+		err = fmt.Errorf("subscriber username is empty")
+		logger.Error("Getenv func returned an error", err, zap.String("journey", "subscriber"))
+		return sub, err
 	}
 
 	c := paho.NewClient(opts)
 	if tok := c.Connect(); tok.Wait() && tok.Error() != nil {
-		return nil, fmt.Errorf("mqtt subscriber connect: %w", tok.Error())
+		logger.Error("Connect func returned an error", err, zap.String("journey", "subscriber"))
+		return sub, fmt.Errorf("error creating a connection with the message broker: %w", tok.Error())
 	}
-	log.Println("[Subscriber] connected to", cfg.MQTTBroker)
-	return &Subscriber{client: c, publisher: pub, cfg: cfg}, nil
+
+	logger.Info("NewSubscriber executed successfully", zap.String("journey", "subscriber"))
+
+	return &Subscriber{
+		client:    c,
+		publisher: pub,
+	}, nil
 }
 
-// SubscribeGroups divide as tags em grupos e assina em paralelo
 func (s *Subscriber) SubscribeGroups(tags []models.MQTTTag) {
-	groups := chunkTags(tags, s.cfg.TagGroupSize)
-	log.Printf("[Subscriber] %d tag(s) divididas em %d grupo(s)", len(tags), len(groups))
+	logger.Info("Init SubscribeGroups", zap.String("journey", "subscriber"))
+
+	size, err := strconv.Atoi(os.Getenv(TAG_GROUP_SIZE))
+	if err != nil {
+		logger.Error("Atoi func returned an error", err, zap.String("journey", "subscriber"))
+	}
+
+	groups := chunkTags(tags, size)
 
 	var wg sync.WaitGroup
 	for i, group := range groups {
@@ -56,79 +78,110 @@ func (s *Subscriber) SubscribeGroups(tags []models.MQTTTag) {
 		}(i, group)
 	}
 	wg.Wait()
-	log.Println("[Subscriber] todos os grupos inscritos, aguardando mensagens...")
+
+	logger.Info("SubscribeGroups executed successfully", zap.String("journey", "subscriber"))
 }
 
 func (s *Subscriber) subscribeGroup(groupIdx int, tags []models.MQTTTag) {
-	for _, tag := range tags {
-		tag := tag // captura para closure
+	logger.Info("Init subscribeGroup", zap.String("journey", "subscriber"))
 
-		// tópico de escuta:
-		// /devices/raw_data/erd/{deviceID}/{rawTopic}
+	for _, tag := range tags {
+		tag := tag
+
 		listenTopic := fmt.Sprintf("/devices/raw_data/erd/%s/%s", tag.DeviceID, tag.RawTopic)
 
 		tok := s.client.Subscribe(listenTopic, 0, func(_ paho.Client, msg paho.Message) {
 			s.handleMessage(tag, msg.Payload())
 		})
+
 		tok.Wait()
+
 		if err := tok.Error(); err != nil {
-			log.Printf("[Subscriber] group=%d erro ao subscrever topic=%s err=%v", groupIdx, listenTopic, err)
+			message := fmt.Sprintf("error subscribing group=%d into topic=%s", groupIdx, listenTopic)
+			logger.Error(message, err, zap.String("journey", "subscriber"))
 			continue
 		}
-		log.Printf("[Subscriber] group=%d inscrito em %s", groupIdx, listenTopic)
+
+		message := fmt.Sprintf("subscribed group=%d into topic=%s successfully", groupIdx, listenTopic)
+		logger.Info(message, zap.String("journey", "subscriber"))
 	}
+
+	logger.Info("subscribeGroup executed successfully", zap.String("journey", "subscriber"))
 }
 
 func (s *Subscriber) handleMessage(tag models.MQTTTag, rawBytes []byte) {
+	logger.Info("Init handleMessage", zap.String("journey", "subscriber"))
+
 	var raw models.RawPayload
+
 	if err := json.Unmarshal(rawBytes, &raw); err != nil {
-		log.Printf("[Subscriber] tag=%s json inválido: %v", tag.TagName, err)
+		message := fmt.Sprintf("invalid JSON received by tag=%s", tag.TagName)
+		logger.Error(message, err, zap.String("journey", "subscriber"))
 		return
 	}
 
 	utcTS, err := convertToUTC(raw.TS)
 	if err != nil {
-		log.Printf("[Subscriber] tag=%s erro no timestamp: %v", tag.TagName, err)
-		// usa o horário atual como fallback
+		message := fmt.Sprintf("convertToUTC returned an error to tag=%s", tag.TagName)
+		logger.Error(message, err, zap.String("journey", "subscriber"))
+
 		utcTS = time.Now().UTC().Format(time.RFC3339)
+		logger.Info("timestamp fallback applied", zap.String("journey", "subscriber"))
 	}
 
 	out := models.FormattedPayload{
 		TS:  utcTS,
 		Val: raw.Val,
 	}
-	outBytes, _ := json.Marshal(out)
+	outBytes, err := json.Marshal(out)
+	if err != nil {
+		logger.Error("error marshaling payload", err, zap.String("journey", "subscriber"))
+		return
+	}
 
-	// publica em:
-	// /devices/formatted_data/erd/{deviceID}/{tagID}
 	s.publisher.Publish(tag.DeviceID, tag.TagID, string(outBytes))
 
-	log.Printf("[Subscriber] tag=%s → publicado TS=%s Val=%s", tag.TagName, utcTS, raw.Val)
+	message := fmt.Sprintf("tag=%s was successfully published with TS=%s and Val=%s", tag.TagName, utcTS, raw.Val)
+	logger.Info(message, zap.String("journey", "subscriber"))
+
+	logger.Info("handleMessage executed successfully", zap.String("journey", "subscriber"))
 }
 
-// convertToUTC recebe um timestamp em UTC-3 (sem offset) e converte para UTC
-// Formatos aceitos: "2006-01-02T15:04:05Z", "2006-01-02T15:04:05", "2006-01-02 15:04:05"
 func convertToUTC(ts string) (string, error) {
+	logger.Info("Init convertToUTC", zap.String("journey", "subscriber"))
+
 	formats := []string{
-		"02/01/2006 15:04:05", // brasileiro: dd/MM/yyyy HH:mm:ss  ← principal
+		"02/01/2006 15:04:05",
 		"2006-01-02T15:04:05Z",
 		"2006-01-02T15:04:05",
 		"2006-01-02 15:04:05",
 	}
 
 	for _, layout := range formats {
-		t, err := time.ParseInLocation(layout, ts, brazilLocation)
+		t, err := time.ParseInLocation(layout, ts, BRAZIL_LOCATION)
+
 		if err == nil {
+			logger.Info("convertToUTC executed successfully", zap.String("journey", "subscriber"))
 			return t.UTC().Format(time.RFC3339), nil
 		}
 	}
-	return "", fmt.Errorf("formato de timestamp não reconhecido: %s", ts)
+
+	err := fmt.Errorf("invalid timestamp format: %s", ts)
+	logger.Error("convertToUTC returned an error", err, zap.String("journey", "subscriber"))
+
+	return "", err
 }
 
 func chunkTags(tags []models.MQTTTag, size int) [][]models.MQTTTag {
+	logger.Info("Init chunkTags", zap.String("journey", "subscriber"))
+
 	var chunks [][]models.MQTTTag
+
 	for size < len(tags) {
 		tags, chunks = tags[size:], append(chunks, tags[:size])
 	}
+
+	logger.Info("chunkTags executed successfully", zap.String("journey", "subscriber"))
+
 	return append(chunks, tags)
 }

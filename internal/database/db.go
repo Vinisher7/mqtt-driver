@@ -4,26 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"mqtt-driver/internal/config"
 	"mqtt-driver/internal/models"
 
 	_ "github.com/microsoft/go-mssqldb"
 )
-
-func Connect(cfg *config.Config) (*sql.DB, error) {
-	connStr := fmt.Sprintf(
-		"sqlserver://%s:%s@%s:%d?database=%s",
-		cfg.DBUser, cfg.DBPassword, cfg.DBServer, cfg.DBPort, cfg.DBName,
-	)
-	db, err := sql.Open("sqlserver", connStr)
-	if err != nil {
-		return nil, fmt.Errorf("open db: %w", err)
-	}
-	if err = db.PingContext(context.Background()); err != nil {
-		return nil, fmt.Errorf("ping db: %w", err)
-	}
-	return db, nil
-}
 
 const query = `
 SELECT

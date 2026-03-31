@@ -6,7 +6,8 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:  
       - name: Send to Coolify
-        run: curl --request GET '${{ secrets.COOLIFY_WEBHOOK }}'
+        run: curl -f -s -S --request GET '${{ secrets.COOLIFY_WEBHOOK }}'

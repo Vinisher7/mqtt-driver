@@ -8,7 +8,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:  
-      - name: Checkout code
-        uses: actions/checkout@v4
       - name: Send to Coolify
-        run: curl --request GET '${{secrets.COOLIFY_WEBHOOK}}' --header 'Authorization: Berear ${{secrets.COOLIFY_TOKEN}}'
+        run: |
+          curl --request GET '${{secrets.COOLIFY_WEBHOOK}}' --header 
+          'Authorization: Berear ${{secrets.COOLIFY_TOKEN}}'

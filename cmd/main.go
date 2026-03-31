@@ -17,7 +17,6 @@ func main() {
 	logger.Info("Starting application...")
 
 	// // ── Banco de dados ────────────────────────────────────────────────
-
 	ctx := context.Background()
 
 	db, err := database.NewPostgresClient(ctx)
@@ -43,14 +42,12 @@ func main() {
 	pub, err := mqtt.NewPublisher()
 	if err != nil {
 		logger.Error("NewPublisher func returned an error", err, zap.String("journey", "publisher"))
-		panic(err)
 	}
 
 	// // ── MQTT Subscriber ───────────────────────────────────────────────
 	sub, err := mqtt.NewSubscriber(pub)
 	if err != nil {
 		logger.Error("NewSubscriber func returned an error", err, zap.String("journey", "subscriber"))
-		panic(err)
 	}
 
 	sub.SubscribeGroups(tags)

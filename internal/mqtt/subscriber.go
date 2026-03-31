@@ -17,7 +17,7 @@ import (
 var (
 	// MQTT_BROKER    = "MQTT_BROKER"
 	// MQTT_CLIENT_ID = "MQTT_CLIENT_ID"
-	// MQTT_USERNAME  = "MQTT_USERNAME"	
+	// MQTT_USERNAME  = "MQTT_USERNAME"
 	// MQTTPassword   = "MQTTPassword"
 	// TAG_GROUP_SIZE = "TAG_GROUP_SIZE"
 

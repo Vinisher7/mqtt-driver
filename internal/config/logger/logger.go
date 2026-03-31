@@ -3,6 +3,7 @@ package logger
 import (
 	"os"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -16,6 +17,8 @@ var (
 )
 
 func init() {
+	location, _ := time.LoadLocation("America/Sao_Paulo")
+
 	logConfig := zap.Config{
 		OutputPaths: []string{getOutputLogs()},
 		Level:       zap.NewAtomicLevelAt(getLevelLogs()),
@@ -24,9 +27,11 @@ func init() {
 			LevelKey:     "level",
 			TimeKey:      "time",
 			MessageKey:   "message",
-			EncodeTime:   zapcore.ISO8601TimeEncoder,
 			EncodeLevel:  zapcore.LowercaseLevelEncoder,
 			EncodeCaller: zapcore.ShortCallerEncoder,
+			EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+				enc.AppendString(t.In(location).Format("2006-01-02T15:04:05.000-0700"))
+			},
 		},
 	}
 

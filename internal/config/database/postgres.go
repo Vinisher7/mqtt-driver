@@ -7,6 +7,7 @@ import (
 	"mqtt-driver/internal/config/logger"
 	"mqtt-driver/internal/models"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -22,6 +23,9 @@ var (
 
 func NewPostgresClient(ctx context.Context) (db *pgx.Conn, err error) {
 	logger.Info("Init NewPostgresClient", zap.String("journey", "database"))
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
 	connString := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -46,6 +50,9 @@ func NewPostgresClient(ctx context.Context) (db *pgx.Conn, err error) {
 func TestPostgresConnection(ctx context.Context, db *pgx.Conn) (err error) {
 	logger.Info("Init TestPostgresConnection", zap.String("journey", "database"))
 
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	err = db.Ping(ctx)
 	if err != nil {
 		logger.Error("Ping func returned an error", err, zap.String("journey", "database"))
@@ -59,6 +66,9 @@ func TestPostgresConnection(ctx context.Context, db *pgx.Conn) (err error) {
 
 func LoadTags(ctx context.Context, db *pgx.Conn) (tags []models.MQTTTag, err error) {
 	logger.Info("Init LoadTags", zap.String("journey", "database"))
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
 	query := `
 		SELECT

@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE mqtt_tags DROP CONSTRAINT IF EXISTS fk_id_device;
+COMMIT;

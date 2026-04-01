@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS mqtt_tags(
     formatted_topic VARCHAR(255) NOT NULL,
     tag_name VARCHAR(30) NOT NULL,
     created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP,
-    CONSTRAINT fk_id_device FOREIGN KEY (id_device) REFERENCES devices(id)
+    updated_at TIMESTAMP
 );
 COMMIT;

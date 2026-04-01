@@ -64,13 +64,7 @@ func TestPostgresConnection(ctx context.Context, db *pgx.Conn) (err error) {
 	return nil
 }
 
-func LoadTags(ctx context.Context, db *pgx.Conn) (tags []models.MQTTTag, err error) {
-	logger.Info("Init LoadTags", zap.String("journey", "database"))
-
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	query := `
+const query = `
 		SELECT
 			CAST(mt.id AS VARCHAR(36)) AS tag_id,
 			mt.tag_name,
@@ -82,22 +76,30 @@ func LoadTags(ctx context.Context, db *pgx.Conn) (tags []models.MQTTTag, err err
 		WHERE d.protocol = 'mqtt'
 		ORDER BY d.id, mt.id
 	`
+
+func LoadTags(ctx context.Context, db *pgx.Conn) (tags []models.MQTTTag, err error) {
+	logger.Info("Init LoadTags", zap.String("journey", "database"))
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	rows, err := db.Query(ctx, query)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		logger.Error("Tags not found", err, zap.String("journey", "database"))
+		return tags, fmt.Errorf("error: %w", err)
+	}
+
 	if err != nil {
 		logger.Error("Query func returned an error", err, zap.String("journey", "database"))
-		return tags, fmt.Errorf("error : %w", err)
+		return tags, fmt.Errorf("error: %w", err)
 	}
 
 	tags, err = pgx.CollectRows(rows, pgx.RowToStructByName[models.MQTTTag])
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		logger.Error("Tags not found", err, zap.String("journey", "database"))
-		return tags, fmt.Errorf("error : %w", err)
-	}
-
 	if err != nil {
 		logger.Error("CollectRows func returned an error", err, zap.String("journey", "database"))
-		return tags, fmt.Errorf("error : %w", err)
+		return tags, fmt.Errorf("error: %w", err)
 
 	}
 

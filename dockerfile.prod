@@ -6,14 +6,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build GOOS=linux -o mqtt-driver ./cmd/main.go
+RUN go build -o mqtt-driver ./cmd/main.go
 
 FROM alpine:latest
 
 WORKDIR /app
 
 COPY --from=builder /app/mqtt-driver .
-
-EXPOSE 8000
 
 ENTRYPOINT ["./mqtt-driver"]
